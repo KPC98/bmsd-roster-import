@@ -18,12 +18,6 @@ function ensureDummy() {
   if (dummyHash) return;
   try { dummyHash = figma.createImage(b64ToBytes(DUMMY_B64)).hash; } catch (e) {}
 }
-const LABEL_FONT = { family: 'Inter', style: 'Bold' };
-let labelFontReady = false;
-async function ensureLabelFont() {
-  if (labelFontReady) return;
-  try { await figma.loadFontAsync(LABEL_FONT); labelFontReady = true; } catch (e) {}
-}
 
 function b64ToBytes(b64) {
   const bin = atob(b64);
@@ -45,32 +39,12 @@ function buildVariant(prefix, n) {
   try { c.resize(WIDTH_TARGET, HEIGHT); } catch (e) {}
   const slots = [];
   for (let i = 0; i < n; i++) {
-    // slot = frame(slate rect + temp number) so variants stay visible pre-import
-    const s = figma.createFrame();
-    s.name = 'slot ' + (i + 1);
-    s.resize(1000, 1000);
-    s.layoutMode = 'NONE';
-    s.clipsContent = true;
-    s.fills = [];
     const r = figma.createRectangle();
-    r.name = 'photo';
+    r.name = 'slot ' + (i + 1);
     r.resize(1000, 1000);
     r.fills = dummyHash ? [{ type: 'IMAGE', imageHash: dummyHash, scaleMode: 'FILL' }] : SLOT_FILL;
-    s.appendChild(r);
-    if (labelFontReady) {
-      try {
-        const t = figma.createText();
-        t.fontName = LABEL_FONT;
-        t.characters = String(i + 1);
-        t.fontSize = 400;
-        t.fills = [{ type: 'SOLID', color: { r: 0.92, g: 0.94, b: 0.97 } }];
-        s.appendChild(t);
-        t.x = (1000 - t.width) / 2;
-        t.y = (1000 - t.height) / 2;
-      } catch (e) {}
-    }
-    c.appendChild(s);
-    slots.push(s);
+    c.appendChild(r);
+    slots.push(r);
   }
   // verify auto-layout actually applied; otherwise fall back to manual positioning
   const autoOk = c.layoutMode === 'HORIZONTAL' && c.children.length === n &&
@@ -114,7 +88,6 @@ figma.ui.onmessage = async msg => {
         compSet = sets[0];
       } else {
         stage = 'build variants';
-        await ensureLabelFont();
         ensureDummy();
         const comps = [4, 5, 6].map(n => buildVariant('Players', n));
         stage = 'combine as variants';
@@ -145,7 +118,6 @@ figma.ui.onmessage = async msg => {
       for (const team of teamOrder) {
         const n = (imagesByTeam[team] || []).length;
         if (n && !variants[n]) {
-          await ensureLabelFont();
           ensureDummy();
           const c = buildVariant(prefix, n);
           compSet.appendChild(c);
@@ -171,8 +143,6 @@ figma.ui.onmessage = async msg => {
         for (let i = 0; i < Math.min(slots.length, imgs.length); i++) {
           slots[i].rect.fills = [{ type: 'IMAGE', imageHash: imgs[i].hash, scaleMode: 'FILL' }];
           slots[i].container.name = imgs[i].name;
-          // drop the temporary character once the real photo is in
-          slots[i].container.children.filter(k => k.type === 'TEXT').forEach(k => { try { k.remove(); } catch (e) {} });
         }
         created.push(inst);
         y += inst.height + 200;
