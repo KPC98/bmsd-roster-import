@@ -119,24 +119,13 @@ figma.ui.onmessage = async msg => {
         const m = /^([^=]+)=(\d+)$/.exec(c.name);
         if (m) { prefix = m[1]; variants[+m[2]] = c; }
       }
-      // auto-add any missing variant a team needs
-      for (const team of teamOrder) {
-        const n = (imagesByTeam[team] || []).length;
-        if (n && !variants[n]) {
-          ensureDummy();
-          const c = buildVariant(prefix, n);
-          compSet.appendChild(c);
-          variants[n] = c;
-        }
-      }
-
       let y = yStart;
-      const created = [];
+      const created = [], skipped = [];
       for (const team of teamOrder) {
         const imgs = (imagesByTeam[team] || []).slice().sort((a, b) => a.name.localeCompare(b.name));
         if (!imgs.length) continue;
         const variant = variants[imgs.length];
-        if (!variant) continue;
+        if (!variant) { skipped.push(team + ' (' + imgs.length + ' players)'); continue; }
 
         const inst = variant.createInstance();
         targetPage.appendChild(inst);
@@ -153,7 +142,9 @@ figma.ui.onmessage = async msg => {
         y += inst.height + 200;
       }
       if (created.length) figma.viewport.scrollAndZoomIntoView(created);
-      figma.closePlugin('Imported ' + created.length + ' team frames');
+      let out = 'Imported ' + created.length + ' team frames';
+      if (skipped.length) out += ' — skipped (no Players=N variant): ' + skipped.join(', ');
+      figma.closePlugin(out);
     }
   } catch (e) {
     figma.closePlugin('Error at [' + stage + ']: ' + e.message);
