@@ -1,6 +1,6 @@
 {
   "name": "BMSD Roster Import",
-  "id": "bmsd-roster-import-2026",
+  "id": "bmsd-roster-import-2026-v112",
   "api": "1.0.0",
   "editorType": ["figma"],
   "main": "code.js",
