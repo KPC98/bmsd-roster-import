@@ -39,6 +39,9 @@ function buildVariant(prefix, n) {
     r.resize(1000, 1000);
     r.fills = dummyHash ? [{ type: 'IMAGE', imageHash: dummyHash, scaleMode: 'FILL' }] : SLOT_FILL;
     c.appendChild(r);
+    try { r.layoutSizingHorizontal = 'FIXED'; } catch (e) {}
+    try { r.layoutSizingVertical = 'FILL'; } catch (e) {}
+    try { r.layoutAlign = 'STRETCH'; } catch (e) {}
     slots.push(r);
   }
   // apply auto layout AFTER children exist, then size
@@ -53,7 +56,8 @@ function buildVariant(prefix, n) {
   if (!autoOk) {
     try { c.layoutMode = 'NONE'; } catch (e) {}
     try { c.resize(WIDTH_TARGET, HEIGHT); } catch (e) {}
-    slots.forEach((r, i) => { try { r.x = i * (1000 + sp); r.y = 0; } catch (e) {} });
+    const startX = (WIDTH_TARGET - (1000 * n + sp * (n - 1))) / 2; // center, like primaryAxisAlignItems=CENTER
+    slots.forEach((r, i) => { try { r.x = startX + i * (1000 + sp); r.y = 0; } catch (e) {} });
   }
   return c;
 }
