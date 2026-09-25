@@ -40,20 +40,30 @@ figma.showUI(__html__, { width: 400, height: 140, title: 'BMSD Roster Import' })
 figma.ui.onmessage = async msg => {
   try {
     if (msg.type === 'start') {
-      stage = 'find or create comp set';
       teamOrder = msg.teams;
+      stage = 'load pages';
       await figma.loadAllPagesAsync();
-      targetPage = figma.currentPage || figma.root.children[0];
+      stage = 'resolve page';
+      targetPage = figma.currentPage;
+      if (!targetPage) targetPage = figma.root.children.find(p => p.type === 'PAGE');
+      if (!targetPage) { figma.closePlugin('No page found in this file.'); return; }
 
+      stage = 'find sets';
       const sets = figma.root.findAll(n => n.type === 'COMPONENT_SET' && n.name === 'Comp');
       if (sets.length) {
         compSet = sets[0];
       } else {
-        compSet = figma.combineAsVariants([4, 5, 6].map(n => buildVariant('Players', n)), targetPage);
-        compSet.name = 'Comp';
-        compSet.x = 0;
-        compSet.y = 0;
+        stage = 'build variants';
+        const comps = [4, 5, 6].map(n => buildVariant('Players', n));
+        stage = 'combine as variants';
+        compSet = figma.combineAsVariants(comps, targetPage);
+        try { compSet.name = 'Comp'; } catch (e) {}
+        try {
+          compSet.x = 0;
+          compSet.y = 0;
+        } catch (e) {}
       }
+      stage = 'position anchor';
       ax = compSet.absoluteTransform[0][2];
       yStart = compSet.absoluteTransform[1][2] + compSet.height + 200;
     } else if (msg.type === 'image') {
