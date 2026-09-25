@@ -18,19 +18,30 @@ function b64ToBytes(b64) {
 
 function buildVariant(prefix, n) {
   const c = figma.createComponent();
-  c.name = prefix + '=' + n;
-  c.layoutMode = 'HORIZONTAL';
-  c.primaryAxisSpacing = SPACING[n] !== undefined ? SPACING[n] : -600;
-  c.primaryAxisSizingMode = 'AUTO';
-  c.counterAxisSizingMode = 'AUTO';
-  c.clipsContent = false;
-  c.fills = [];
+  const sp = SPACING[n] !== undefined ? SPACING[n] : -600;
+  try { c.name = prefix + '=' + n; } catch (e) {}
+  try { c.layoutMode = 'HORIZONTAL'; } catch (e) {}
+  try { c.primaryAxisSpacing = sp; } catch (e) {}
+  try { c.primaryAxisSizingMode = 'AUTO'; } catch (e) {}
+  try { c.counterAxisSizingMode = 'AUTO'; } catch (e) {}
+  try { c.clipsContent = false; } catch (e) {}
+  try { c.fills = []; } catch (e) {}
+  const slots = [];
   for (let i = 0; i < n; i++) {
     const r = figma.createRectangle();
     r.name = 'slot ' + (i + 1);
     r.resize(1000, 1000);
     r.fills = SLOT_FILL;
     c.appendChild(r);
+    slots.push(r);
+  }
+  // verify auto-layout actually applied; otherwise fall back to manual positioning
+  const autoOk = c.layoutMode === 'HORIZONTAL' && c.children.length === n &&
+    n > 1 && Math.abs((c.children[1].x - c.children[0].x) - (1000 + sp)) < 1;
+  if (!autoOk) {
+    try { c.layoutMode = 'NONE'; } catch (e) {}
+    try { c.resize(1000 * n + sp * (n - 1), 1000); } catch (e) {}
+    slots.forEach((r, i) => { try { r.x = i * (1000 + sp); r.y = 0; } catch (e) {} });
   }
   return c;
 }
