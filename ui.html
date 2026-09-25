@@ -1,0 +1,57 @@
+<style>
+body{font:13px -apple-system,-system-ui,sans-serif;background:#1e1e1e;color:#eee;display:flex;flex-direction:column;gap:10px;padding:16px;margin:0}
+button{padding:10px;background:#9AC942;border:0;font-weight:600;cursor:pointer;border-radius:4px}
+button:disabled{opacity:.5}
+#s{color:#aaa;line-height:1.4}
+</style>
+<button id="b">Select roster folder…</button>
+<div id="s">Folder must contain one sub-folder per team, player photos as PNG inside.<br>e.g. <code>roster/GODL/GodLADmiNO.png</code></div>
+<input id="f" type="file" webkitdirectory hidden>
+<script>
+const $ = id => document.getElementById(id);
+$('b').onclick = () => $('f').click();
+
+async function toPng1000(file) {          // downscale -> keeps Figma createImage under its 4096px limit
+  const url = URL.createObjectURL(file);
+  const img = await new Promise((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = rej;
+    i.src = url;
+  });
+  const s = Math.min(1, 1000 / Math.max(img.width, img.height));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(img.width * s));
+  c.height = Math.max(1, Math.round(img.height * s));
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  URL.revokeObjectURL(url);
+  return c.toDataURL('image/png').split(',')[1];
+}
+
+$('f').onchange = async () => {
+  const files = [...$('f').files].filter(x => x.name.toLowerCase().endsWith('.png') && !x.name.startsWith('.'));
+  if (!files.length) { $('s').textContent = 'No PNG files found in that folder.'; return; }
+  $('b').disabled = true;
+  try {
+    const teams = [...new Set(files.map(x => x.webkitRelativePath.split('/')[1] || ''))].filter(Boolean);
+    parent.postMessage({ pluginMessage: { type: 'start', teams } }, '*');
+    let i = 0;
+    for (const file of files) {
+      const parts = file.webkitRelativePath.split('/');
+      const b64 = await toPng1000(file);
+      parent.postMessage({ pluginMessage: {
+        type: 'image',
+        team: parts[1] || '',
+        name: file.name.replace(/\.png$/i, ''),
+        b64
+      } }, '*');
+      $('s').textContent = 'Sending ' + (++i) + '/' + files.length + '…';
+    }
+    parent.postMessage({ pluginMessage: { type: 'done' } }, '*');
+    $('s').textContent = 'Importing into Figma…';
+  } catch (e) {
+    $('s').textContent = 'Error: ' + e.message;
+    $('b').disabled = false;
+  }
+};
+</script>
