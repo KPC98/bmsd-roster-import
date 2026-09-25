@@ -30,13 +30,8 @@ function buildVariant(prefix, n) {
   const c = figma.createComponent();
   const sp = spacingFor(n);
   try { c.name = prefix + '=' + n; } catch (e) {}
-  try { c.layoutMode = 'HORIZONTAL'; } catch (e) {}
-  try { c.primaryAxisSpacing = sp; } catch (e) {}
-  try { c.primaryAxisSizingMode = 'FIXED'; } catch (e) {}
-  try { c.counterAxisSizingMode = 'FIXED'; } catch (e) {}
   try { c.clipsContent = false; } catch (e) {}
   try { c.fills = []; } catch (e) {}
-  try { c.resize(WIDTH_TARGET, HEIGHT); } catch (e) {}
   const slots = [];
   for (let i = 0; i < n; i++) {
     const r = figma.createRectangle();
@@ -46,13 +41,19 @@ function buildVariant(prefix, n) {
     c.appendChild(r);
     slots.push(r);
   }
+  // apply auto layout AFTER children exist, then size
+  try { c.layoutMode = 'HORIZONTAL'; } catch (e) {}
+  try { c.primaryAxisSpacing = sp; } catch (e) {}
+  try { c.primaryAxisSizingMode = 'FIXED'; } catch (e) {}
+  try { c.counterAxisSizingMode = 'FIXED'; } catch (e) {}
+  try { c.resize(WIDTH_TARGET, HEIGHT); } catch (e) {}
   // verify auto-layout actually applied; otherwise fall back to manual positioning
   const autoOk = c.layoutMode === 'HORIZONTAL' && c.children.length === n &&
     n > 1 && Math.abs((c.children[1].x - c.children[0].x) - (1000 + sp)) < 1;
   if (!autoOk) {
     try { c.layoutMode = 'NONE'; } catch (e) {}
     try { c.resize(WIDTH_TARGET, HEIGHT); } catch (e) {}
-    slots.forEach((s, i) => { try { s.x = i * (1000 + sp); s.y = 0; } catch (e) {} });
+    slots.forEach((r, i) => { try { r.x = i * (1000 + sp); r.y = 0; } catch (e) {} });
   }
   return c;
 }
