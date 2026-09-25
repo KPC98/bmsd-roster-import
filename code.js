@@ -1,10 +1,13 @@
-// BMSD Roster Import — self-contained, no server, no hardcoded node IDs.
-// Finds the "Comp" COMPONENT_SET in the current file, then creates one instance
-// per team (variant Players=N matched to roster size) with player photos.
+// BMSD Roster Import v1.1 — self-contained, no server, no hardcoded node IDs.
+// Creates the "Comp" COMPONENT_SET (Players=4/5/6) if the file doesn't have one,
+// then builds one instance per team with player photos.
 let stage = 'start';
 const imagesByTeam = {};
 let teamOrder = [];
 let compSet = null, targetPage = null, ax = 0, yStart = 0;
+
+const SPACING = { 4: -550, 5: -610, 6: -659 }; // overlap per variant, from the BMSD comp
+const SLOT_FILL = [{ type: 'SOLID', color: { r: 0.149, g: 0.192, b: 0.290 } }]; // slate placeholder #26314A
 
 function b64ToBytes(b64) {
   const bin = atob(b64);
@@ -13,20 +16,44 @@ function b64ToBytes(b64) {
   return u;
 }
 
+function buildVariant(prefix, n) {
+  const c = figma.createComponent();
+  c.name = prefix + '=' + n;
+  c.layoutMode = 'HORIZONTAL';
+  c.primaryAxisSpacing = SPACING[n] !== undefined ? SPACING[n] : -600;
+  c.primaryAxisSizingMode = 'AUTO';
+  c.counterAxisSizingMode = 'AUTO';
+  c.clipsContent = false;
+  c.fills = [];
+  for (let i = 0; i < n; i++) {
+    const r = figma.createRectangle();
+    r.name = 'slot ' + (i + 1);
+    r.resize(1000, 1000);
+    r.fills = SLOT_FILL;
+    c.appendChild(r);
+  }
+  return c;
+}
+
 figma.showUI(__html__, { width: 400, height: 140, title: 'BMSD Roster Import' });
 
 figma.ui.onmessage = async msg => {
   try {
     if (msg.type === 'start') {
-      stage = 'find comp set';
+      stage = 'find or create comp set';
       teamOrder = msg.teams;
       await figma.loadAllPagesAsync();
+      targetPage = figma.currentPage || figma.root.children[0];
+
       const sets = figma.root.findAll(n => n.type === 'COMPONENT_SET' && n.name === 'Comp');
-      if (!sets.length) { figma.closePlugin('Component set "Comp" not found in this file.'); return; }
-      compSet = sets[0];
-      let p = compSet;
-      while (p && p.type !== 'PAGE') p = p.parent;
-      targetPage = p;
+      if (sets.length) {
+        compSet = sets[0];
+      } else {
+        compSet = figma.combineAsVariants([4, 5, 6].map(n => buildVariant('Players', n)), targetPage);
+        compSet.name = 'Comp';
+        compSet.x = 0;
+        compSet.y = 0;
+      }
       ax = compSet.absoluteTransform[0][2];
       yStart = compSet.absoluteTransform[1][2] + compSet.height + 200;
     } else if (msg.type === 'image') {
@@ -36,18 +63,29 @@ figma.ui.onmessage = async msg => {
     } else if (msg.type === 'done') {
       stage = 'import';
       const variants = {};
+      let prefix = 'Players';
       for (const c of compSet.children) {
         if (c.type !== 'COMPONENT') continue;
-        const m = /^Players=(\d+)$/.exec(c.name);
-        if (m) variants[+m[1]] = c;
+        const m = /^([^=]+)=(\d+)$/.exec(c.name);
+        if (m) { prefix = m[1]; variants[+m[2]] = c; }
       }
+      // auto-add any missing variant a team needs
+      for (const team of teamOrder) {
+        const n = (imagesByTeam[team] || []).length;
+        if (n && !variants[n]) {
+          const c = buildVariant(prefix, n);
+          compSet.appendChild(c);
+          variants[n] = c;
+        }
+      }
+
       let y = yStart;
-      const created = [], skipped = [];
+      const created = [];
       for (const team of teamOrder) {
         const imgs = (imagesByTeam[team] || []).slice().sort((a, b) => a.name.localeCompare(b.name));
         if (!imgs.length) continue;
         const variant = variants[imgs.length];
-        if (!variant) { skipped.push(team + ' (' + imgs.length + ' players)'); continue; }
+        if (!variant) continue;
 
         const inst = variant.createInstance();
         targetPage.appendChild(inst);
@@ -64,9 +102,7 @@ figma.ui.onmessage = async msg => {
         y += inst.height + 200;
       }
       if (created.length) figma.viewport.scrollAndZoomIntoView(created);
-      let msgOut = 'Imported ' + created.length + ' team frames';
-      if (skipped.length) msgOut += ' — skipped (no variant): ' + skipped.join(', ');
-      figma.closePlugin(msgOut);
+      figma.closePlugin('Imported ' + created.length + ' team frames');
     }
   } catch (e) {
     figma.closePlugin('Error at [' + stage + ']: ' + e.message);

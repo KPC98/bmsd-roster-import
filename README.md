@@ -9,9 +9,10 @@ Imports team roster photos into a Figma file as instances of your `Comp` compone
 
 ## Requirements in the Figma file
 
-- A **component set named exactly `Comp`** with variants `Players=4`, `Players=5`, `Players=6`
-  (horizontal row of 1000×1000 image slots). Teams whose size has no variant are skipped
-  and reported in the completion message.
+- **None.** If the file has a component set named `Comp`, it is used. If not, the plugin
+  creates it: variants `Players=4/5/6`, horizontal row of 1000×1000 slots with the BMSD
+  overlap spacings (-550/-610/-659). If a team has a size with no existing variant
+  (e.g. 7 players), the plugin adds that variant to the set automatically.
 
 ## Use
 
@@ -40,6 +41,12 @@ above 4096px).
 
 - No server, no network access, no external dependencies — works offline.
 - The folder name becomes the instance name; the PNG file name (minus `.png`) becomes the slot name.
+
+## Changelog
+
+- **v1.1** — Plugin creates the `Comp` component set when missing; auto-adds variants
+  for roster sizes not yet in the set.
+- **v1.0** — Initial release.
 
 ## Roadmap
 
