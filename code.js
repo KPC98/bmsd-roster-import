@@ -97,6 +97,10 @@ figma.ui.onmessage = async msg => {
           compSet.x = 0;
           compSet.y = 0;
         } catch (e) {}
+        // if auto-layout props didn't stick (some Figma builds), stack variants manually
+        if (comps[0].layoutMode !== 'HORIZONTAL') {
+          comps.forEach((c, i) => { try { c.x = 0; c.y = i * (HEIGHT + 120); } catch (e) {} });
+        }
       }
       stage = 'position anchor';
       ax = compSet.absoluteTransform[0][2];
