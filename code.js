@@ -6,9 +6,10 @@ const imagesByTeam = {};
 let teamOrder = [];
 let compSet = null, targetPage = null, ax = 0, yStart = 0;
 
-const WIDTH_TARGET = 2290; // BMSD comp frame width
+const WIDTH_TARGET = 2440; // BMSD comp frame width (fixed, from Figma file 7404:762)
 const HEIGHT = 1000;
-function spacingFor(n) { return n > 1 ? Math.round(((WIDTH_TARGET - 1000 * n) / (n - 1)) * 100) / 100 : 0; }
+const SPACING = { 4: -550, 5: -610, 6: -659 }; // analyzed from the comp set
+function spacingFor(n) { return SPACING[n] !== undefined ? SPACING[n] : (n > 1 ? Math.round(((WIDTH_TARGET - 1000 * n) / (n - 1)) * 100) / 100 : 0); }
 const SLOT_FILL = [{ type: 'SOLID', color: { r: 0.149, g: 0.192, b: 0.290 } }]; // slate placeholder #26314A
 const LABEL_FONT = { family: 'Inter', style: 'Bold' };
 let labelFontReady = false;
@@ -30,10 +31,11 @@ function buildVariant(prefix, n) {
   try { c.name = prefix + '=' + n; } catch (e) {}
   try { c.layoutMode = 'HORIZONTAL'; } catch (e) {}
   try { c.primaryAxisSpacing = sp; } catch (e) {}
-  try { c.primaryAxisSizingMode = 'AUTO'; } catch (e) {}
-  try { c.counterAxisSizingMode = 'AUTO'; } catch (e) {}
+  try { c.primaryAxisSizingMode = 'FIXED'; } catch (e) {}
+  try { c.counterAxisSizingMode = 'FIXED'; } catch (e) {}
   try { c.clipsContent = false; } catch (e) {}
   try { c.fills = []; } catch (e) {}
+  try { c.resize(WIDTH_TARGET, HEIGHT); } catch (e) {}
   const slots = [];
   for (let i = 0; i < n; i++) {
     // slot = frame(slate rect + temp number) so variants stay visible pre-import
