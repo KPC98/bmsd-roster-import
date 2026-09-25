@@ -26,6 +26,25 @@ function b64ToBytes(b64) {
   return u;
 }
 
+const SET_W = 2480, SET_H = 3466;
+function padSetBounds(set, n) {
+  // invisible 1px anchors at opposite corners force exact bounds without relying on padding props
+  try {
+    const totalH = 20 + n * HEIGHT + (n - 1) * 213 + 20;
+    const mk = (x, y) => {
+      const a = figma.createRectangle();
+      a.resize(1, 1);
+      a.fills = [];
+      a.name = 'bounds-anchor';
+      set.appendChild(a);
+      a.x = x;
+      a.y = y;
+    };
+    mk(-20, -20);
+    mk(SET_W - 21, totalH - 21);
+  } catch (e) {}
+}
+
 function buildVariant(prefix, n) {
   const c = figma.createComponent();
   const sp = spacingFor(n);
@@ -91,6 +110,14 @@ figma.ui.onmessage = async msg => {
       const sets = figma.root.findAll(n => n.type === 'COMPONENT_SET' && n.name === 'Comp');
       if (sets.length) {
         compSet = sets[0];
+        // repair a legacy/broken set: variants stacked at the same y with no set layout
+        const vcomps = compSet.children.filter(c => c.type === 'COMPONENT');
+        if (compSet.layoutMode !== 'VERTICAL' && vcomps.length > 1 &&
+            new Set(vcomps.map(c => Math.round(c.y || 0))).size < vcomps.length) {
+          stage = 'repair set';
+          vcomps.forEach((c, i) => { try { c.x = 20; c.y = 20 + i * (HEIGHT + 213); } catch (e) {} });
+          padSetBounds(compSet, vcomps.length);
+        }
       } else {
         stage = 'build variants';
         ensureDummy();
@@ -102,9 +129,21 @@ figma.ui.onmessage = async msg => {
           compSet.x = 0;
           compSet.y = 0;
         } catch (e) {}
-        // if auto-layout props didn't stick (some Figma builds), stack variants manually
-        if (comps[0].layoutMode !== 'HORIZONTAL') {
-          comps.forEach((c, i) => { try { c.x = 0; c.y = i * (HEIGHT + 120); } catch (e) {} });
+        // set layout per reference: vertical flow, spacing 213, padding 20, radius 5, purple stroke
+        try { compSet.layoutMode = 'VERTICAL'; } catch (e) {}
+        try { compSet.primaryAxisSpacing = 213; } catch (e) {}
+        try { compSet.paddingLeft = 20; compSet.paddingRight = 20; compSet.paddingTop = 20; compSet.paddingBottom = 20; } catch (e) {}
+        try { compSet.clipsContent = true; } catch (e) {}
+        try { compSet.cornerRadius = 5; } catch (e) {}
+        try {
+          compSet.strokes = [{ type: 'SOLID', color: { r: 0.541, g: 0.220, b: 0.961 } }];
+          compSet.strokeWeight = 1;
+          compSet.strokeAlign = 'INSIDE';
+        } catch (e) {}
+        // if the set's layout props didn't stick (some Figma builds), arrange variants manually
+        if (compSet.layoutMode !== 'VERTICAL') {
+          comps.forEach((c, i) => { try { c.x = 20; c.y = 20 + i * (HEIGHT + 213); } catch (e) {} });
+          padSetBounds(compSet, comps.length);
         }
       }
       stage = 'position anchor';
