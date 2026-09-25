@@ -6,8 +6,16 @@ const imagesByTeam = {};
 let teamOrder = [];
 let compSet = null, targetPage = null, ax = 0, yStart = 0;
 
-const SPACING = { 4: -550, 5: -610, 6: -659 }; // overlap per variant, from the BMSD comp
+const WIDTH_TARGET = 2290; // BMSD comp frame width
+const HEIGHT = 1000;
+function spacingFor(n) { return n > 1 ? Math.round(((WIDTH_TARGET - 1000 * n) / (n - 1)) * 100) / 100 : 0; }
 const SLOT_FILL = [{ type: 'SOLID', color: { r: 0.149, g: 0.192, b: 0.290 } }]; // slate placeholder #26314A
+const LABEL_FONT = { family: 'Inter', style: 'Bold' };
+let labelFontReady = false;
+async function ensureLabelFont() {
+  if (labelFontReady) return;
+  try { await figma.loadFontAsync(LABEL_FONT); labelFontReady = true; } catch (e) {}
+}
 
 function b64ToBytes(b64) {
   const bin = atob(b64);
@@ -18,7 +26,7 @@ function b64ToBytes(b64) {
 
 function buildVariant(prefix, n) {
   const c = figma.createComponent();
-  const sp = SPACING[n] !== undefined ? SPACING[n] : -600;
+  const sp = spacingFor(n);
   try { c.name = prefix + '=' + n; } catch (e) {}
   try { c.layoutMode = 'HORIZONTAL'; } catch (e) {}
   try { c.primaryAxisSpacing = sp; } catch (e) {}
@@ -28,22 +36,54 @@ function buildVariant(prefix, n) {
   try { c.fills = []; } catch (e) {}
   const slots = [];
   for (let i = 0; i < n; i++) {
+    // slot = frame(slate rect + temp number) so variants stay visible pre-import
+    const s = figma.createFrame();
+    s.name = 'slot ' + (i + 1);
+    s.resize(1000, 1000);
+    s.layoutMode = 'NONE';
+    s.clipsContent = true;
+    s.fills = [];
     const r = figma.createRectangle();
-    r.name = 'slot ' + (i + 1);
+    r.name = 'photo';
     r.resize(1000, 1000);
     r.fills = SLOT_FILL;
-    c.appendChild(r);
-    slots.push(r);
+    s.appendChild(r);
+    if (labelFontReady) {
+      try {
+        const t = figma.createText();
+        t.fontName = LABEL_FONT;
+        t.characters = String(i + 1);
+        t.fontSize = 400;
+        t.fills = [{ type: 'SOLID', color: { r: 0.92, g: 0.94, b: 0.97 } }];
+        s.appendChild(t);
+        t.x = (1000 - t.width) / 2;
+        t.y = (1000 - t.height) / 2;
+      } catch (e) {}
+    }
+    c.appendChild(s);
+    slots.push(s);
   }
   // verify auto-layout actually applied; otherwise fall back to manual positioning
   const autoOk = c.layoutMode === 'HORIZONTAL' && c.children.length === n &&
     n > 1 && Math.abs((c.children[1].x - c.children[0].x) - (1000 + sp)) < 1;
   if (!autoOk) {
     try { c.layoutMode = 'NONE'; } catch (e) {}
-    try { c.resize(1000 * n + sp * (n - 1), 1000); } catch (e) {}
-    slots.forEach((r, i) => { try { r.x = i * (1000 + sp); r.y = 0; } catch (e) {} });
+    try { c.resize(WIDTH_TARGET, HEIGHT); } catch (e) {}
+    slots.forEach((s, i) => { try { s.x = i * (1000 + sp); s.y = 0; } catch (e) {} });
   }
   return c;
+}
+
+// slot accessor: works for both plain-rect comps (BMSD original) and framed slots (plugin-created)
+function slotNodes(inst) {
+  return inst.children.map(c => {
+    if (c.type === 'RECTANGLE') return { container: c, rect: c };
+    if (c.type === 'FRAME') {
+      const r = c.children.find(k => k.type === 'RECTANGLE');
+      if (r) return { container: c, rect: r };
+    }
+    return null;
+  }).filter(Boolean);
 }
 
 figma.showUI(__html__, { width: 400, height: 140, title: 'BMSD Roster Import' });
@@ -65,6 +105,7 @@ figma.ui.onmessage = async msg => {
         compSet = sets[0];
       } else {
         stage = 'build variants';
+        await ensureLabelFont();
         const comps = [4, 5, 6].map(n => buildVariant('Players', n));
         stage = 'combine as variants';
         compSet = figma.combineAsVariants(comps, targetPage);
@@ -94,6 +135,7 @@ figma.ui.onmessage = async msg => {
       for (const team of teamOrder) {
         const n = (imagesByTeam[team] || []).length;
         if (n && !variants[n]) {
+          await ensureLabelFont();
           const c = buildVariant(prefix, n);
           compSet.appendChild(c);
           variants[n] = c;
@@ -114,10 +156,12 @@ figma.ui.onmessage = async msg => {
         inst.x = ax;
         inst.y = y;
 
-        const slots = inst.children.filter(c => c.type === 'RECTANGLE');
+        const slots = slotNodes(inst);
         for (let i = 0; i < Math.min(slots.length, imgs.length); i++) {
-          slots[i].fills = [{ type: 'IMAGE', imageHash: imgs[i].hash, scaleMode: 'FILL' }];
-          slots[i].name = imgs[i].name;
+          slots[i].rect.fills = [{ type: 'IMAGE', imageHash: imgs[i].hash, scaleMode: 'FILL' }];
+          slots[i].container.name = imgs[i].name;
+          // drop the temporary character once the real photo is in
+          slots[i].container.children.filter(k => k.type === 'TEXT').forEach(k => { try { k.remove(); } catch (e) {} });
         }
         created.push(inst);
         y += inst.height + 200;
